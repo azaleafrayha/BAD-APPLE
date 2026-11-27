@@ -16,10 +16,6 @@ MAX_DURATION = 43.5   # Menyesuaikan klip 43 detik
 
 
 def frame_to_ssd1306_bytes(gray_frame: np.ndarray) -> bytes:
-    """
-    Konversi frame grayscale 128x64 ke 1024 byte format buffer vertikal SSD1306:
-    Tiap byte mewakili 8 piksel vertikal (bit 0 = atas, bit 7 = bawah).
-    """
     resized = cv2.resize(gray_frame, (WIDTH, HEIGHT), interpolation=cv2.INTER_AREA)
     bits = (resized >= THRESHOLD).astype(np.uint8)
 
@@ -42,15 +38,20 @@ def main():
     if START_SEC > 0:
         cap.set(cv2.CAP_PROP_POS_MSEC, START_SEC * 1000.0)
 
-    ser = serial.Serial(PORT, BAUD, timeout=2)
-    time.sleep(2)  # Tunggu Arduino Uno reset saat koneksi Serial dibuka
-    ser.reset_input_buffer()
+    ser = serial.Serial(PORT, BAUD, timeout=0.5)
+    time.sleep(2)  # Tunggu Arduino Uno selesai boot
 
     print("Menunggu sinyal 'R' dari Arduino Uno...")
     while True:
+        ser.write(b"?")  # Tanya kesiapan Arduino tanpa menghapus buffer awal
         b = ser.read(1)
         if b == b"R":
             break
+        if b == b"E":
+            raise RuntimeError("OLED tidak terdeteksi oleh Arduino (cek kabel / 0x3C vs 0x3D).")
+
+    ser.timeout = 2
+    ser.reset_input_buffer()  # Bersihkan sisa 'R' ekstra sebelum mulai kirim frame
 
     print(f"Mulai streaming ke OLED ({TARGET_FPS} FPS, max {MAX_DURATION}s)...")
     start_time = time.perf_counter()
