@@ -4,15 +4,14 @@ import numpy as np
 import serial
 
 PORT = "COM3"
-BAUD = 115200
-VIDEO_PATH = r"C:\Users\User\Pictures\Bad Apple!! - 43sc - Trim.mp4"
+BAUD = 500000
+VIDEO_PATH = r"C:\Users\User\Downloads\BA.mp4"
 
 WIDTH = 128
 HEIGHT = 64
-THRESHOLD = 128       # Bisa digeser (0-255) kalau siluetnya kurang jelas
-TARGET_FPS = 12       # 10-15 FPS pas untuk OLED I2C 128x64
-START_SEC = 0.0
-MAX_DURATION = 43.5   # Menyesuaikan klip 43 detik
+THRESHOLD = 128
+TARGET_FPS = 25       # Lebih mulus dari 12 FPS
+MAX_DURATION = 43.5
 
 
 def frame_to_ssd1306_bytes(gray_frame: np.ndarray) -> bytes:
@@ -33,29 +32,22 @@ def main():
         raise RuntimeError(f"Gagal membuka video: {VIDEO_PATH}")
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    step_frames = max(1, round(src_fps / TARGET_FPS))
-
-    if START_SEC > 0:
-        cap.set(cv2.CAP_PROP_POS_MSEC, START_SEC * 1000.0)
 
     ser = serial.Serial(PORT, BAUD, timeout=0.5)
-    time.sleep(2)  # Tunggu Arduino Uno selesai boot
+    time.sleep(2)
 
     print("Menunggu sinyal 'R' dari Arduino Uno...")
     while True:
-        ser.write(b"?")  # Tanya kesiapan Arduino tanpa menghapus buffer awal
-        b = ser.read(1)
-        if b == b"R":
+        ser.write(b"?")
+        if ser.read(1) == b"R":
             break
-        if b == b"E":
-            raise RuntimeError("OLED tidak terdeteksi oleh Arduino (cek kabel / 0x3C vs 0x3D).")
 
-    ser.timeout = 2
-    ser.reset_input_buffer()  # Bersihkan sisa 'R' ekstra sebelum mulai kirim frame
+    ser.timeout = 1
+    ser.reset_input_buffer()
 
-    print(f"Mulai streaming ke OLED ({TARGET_FPS} FPS, max {MAX_DURATION}s)...")
+    print(f"Mulai streaming smooth ke OLED (target {TARGET_FPS} FPS)...")
     start_time = time.perf_counter()
-    frame_idx = 0
+    current_video_idx = 0
     sent_frames = 0
     frame_interval = 1.0 / TARGET_FPS
 
@@ -65,41 +57,40 @@ def main():
             if elapsed >= MAX_DURATION:
                 break
 
+            # Lompati frame jika tertinggal agar kecepatan video tetap 1x real-time
+            target_video_idx = int(elapsed * src_fps)
+            while current_video_idx < target_video_idx:
+                if not cap.grab():
+                    break
+                current_video_idx += 1
+
             ret, frame = cap.read()
             if not ret:
                 break
-
-            frame_idx += 1
-            if (frame_idx - 1) % step_frames != 0:
-                continue
+            current_video_idx += 1
 
             loop_start = time.perf_counter()
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             payload = frame_to_ssd1306_bytes(gray)
 
-            ser.write(b"F")
-            ser.write(payload)
-            ser.flush()
+            ser.write(b"F" + payload)
 
-            ack = ser.read(1)
-            if ack != b"R":
-                print("Peringatan: tidak menerima 'R', mencoba sinkronisasi ulang...")
+            if ser.read(1) != b"R":
                 ser.reset_input_buffer()
 
             sent_frames += 1
 
-            work_time = time.perf_counter() - loop_start
-            sleep_time = frame_interval - work_time
+            sleep_time = frame_interval - (time.perf_counter() - loop_start)
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        print("\nDihentikan oleh pengguna.")
+        print("\nDihentikan.")
     finally:
         cap.release()
         ser.close()
-        total_time = time.perf_counter() - start_time
-        print(f"Selesai: {sent_frames} frame terkirim dalam {total_time:.2f} detik.")
+        total = time.perf_counter() - start_time
+        print(f"Selesai: {sent_frames} frame dalam {total:.2f} detik ({sent_frames/total:.1f} FPS).")
 
 
 if __name__ == "__main__":
