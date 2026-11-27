@@ -5,20 +5,20 @@
 void setup() {
   Serial.begin(115200);
   Wire.begin();
-  Serial.println("Mencari perangkat I2C...");
+  Serial.println("Searching I2C...");
 
   byte count = 0;
   for (byte addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
-      Serial.print("OLED terdeteksi di alamat: 0x");
+      Serial.print("OLED detected at address: 0x");
       Serial.println(addr, HEX);
       count++;
     }
   }
 
   if (count == 0) {
-    Serial.println("Tidak ada perangkat I2C terdeteksi! Cek kabel VCC, GND, SDA (A4), SCL (A5).");
+    Serial.println("No I2C devices detected! Check VCC, GND, SDA (A4), SCL (A5) cables.");
   }
 }
 
