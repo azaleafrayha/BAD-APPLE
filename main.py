@@ -11,7 +11,7 @@ WIDTH = 128
 HEIGHT = 64
 THRESHOLD = 128
 TARGET_FPS = 25       # Lebih mulus dari 12 FPS
-MAX_DURATION = 43.5
+MAX_DURATION = 56.5
 
 
 def frame_to_ssd1306_bytes(gray_frame: np.ndarray) -> bytes:
