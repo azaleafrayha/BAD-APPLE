@@ -5,12 +5,12 @@ import serial
 
 PORT = "COM3"
 BAUD = 500000
-VIDEO_PATH = r"C:\Users\User\Downloads\BA.mp4"
+VIDEO_PATH = r"C:\Users\User\Downloads\BA.mp4" # copy the video file path here from your computer
 
 WIDTH = 128
 HEIGHT = 64
 THRESHOLD = 128
-TARGET_FPS = 25       # Lebih mulus dari 12 FPS
+TARGET_FPS = 25       
 MAX_DURATION = 56.5
 
 
@@ -29,14 +29,14 @@ def frame_to_ssd1306_bytes(gray_frame: np.ndarray) -> bytes:
 def main():
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
-        raise RuntimeError(f"Gagal membuka video: {VIDEO_PATH}")
+        raise RuntimeError(f"Failed to open video: {VIDEO_PATH}")
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
 
     ser = serial.Serial(PORT, BAUD, timeout=0.5)
     time.sleep(2)
 
-    print("Menunggu sinyal 'R' dari Arduino Uno...")
+    print("Waiting for 'R' signal from Arduino Uno...")
     while True:
         ser.write(b"?")
         if ser.read(1) == b"R":
@@ -45,7 +45,7 @@ def main():
     ser.timeout = 1
     ser.reset_input_buffer()
 
-    print(f"Mulai streaming smooth ke OLED (target {TARGET_FPS} FPS)...")
+    print(f"Streaming to SSD1306 (target {TARGET_FPS} FPS)...")
     start_time = time.perf_counter()
     current_video_idx = 0
     sent_frames = 0
@@ -57,7 +57,7 @@ def main():
             if elapsed >= MAX_DURATION:
                 break
 
-            # Lompati frame jika tertinggal agar kecepatan video tetap 1x real-time
+            # Skip frames to match the target FPS
             target_video_idx = int(elapsed * src_fps)
             while current_video_idx < target_video_idx:
                 if not cap.grab():
@@ -85,12 +85,12 @@ def main():
                 time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        print("\nDihentikan.")
+        print("\nStopped.")
     finally:
         cap.release()
         ser.close()
         total = time.perf_counter() - start_time
-        print(f"Selesai: {sent_frames} frame dalam {total:.2f} detik ({sent_frames/total:.1f} FPS).")
+        print(f"Done: {sent_frames} frame in {total:.2f} second ({sent_frames/total:.1f} FPS).")
 
 
 if __name__ == "__main__":
